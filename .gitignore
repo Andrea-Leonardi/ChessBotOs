@@ -1,0 +1,17 @@
+# Private credentials and secrets
+credentials.h
+secrets.h
+*.secret
+*.env
+*.local
+
+# Build artifacts and temp
+build/
+.pio/
+*.bin
+*.hex
+*.elf
+
+# System and OS files
+Thumbs.db
+.DS_Store
