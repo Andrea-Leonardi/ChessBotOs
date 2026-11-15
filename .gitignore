@@ -5,6 +5,15 @@ secrets.h
 *.env
 *.local
 
+# Datasets and large binaries
+datasets/
+dataset/
+stockfish-windows-x86-64-universal/
+
+# Python cache
+__pycache__/
+*.py[cod]
+
 # Build artifacts and temp
 build/
 .pio/

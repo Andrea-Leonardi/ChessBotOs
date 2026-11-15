@@ -1,4 +1,5 @@
 #include "esp_camera.h"
+#include "ESP32_OV5640_AF.h"
 #include <WiFi.h>
 
 // ===========================
@@ -18,6 +19,8 @@
 const char *ssid = "";
 const char *password = "";
 #endif
+
+OV5640 ov5640;
 
 void startCameraServer();
 void setupLedFlash();
@@ -107,6 +110,20 @@ void setup() {
 #if defined(CAMERA_MODEL_ESP32S3_EYE)
   s->set_vflip(s, 1);
 #endif
+
+  if (s->id.PID == OV5640_PID) {
+    ov5640.start(s);
+    if (ov5640.focusInit() == 0) {
+      Serial.println("OV5640_Focus_Init Successful!");
+      if (ov5640.autoFocusMode() == 0) {
+        Serial.println("OV5640_Auto_Focus Successful!");
+      } else {
+        Serial.println("OV5640_Auto_Focus Failed!");
+      }
+    } else {
+      Serial.println("OV5640_Focus_Init Failed!");
+    }
+  }
 
 // Setup LED FLash if LED pin is defined in camera_pins.h
 #if defined(LED_GPIO_NUM)
