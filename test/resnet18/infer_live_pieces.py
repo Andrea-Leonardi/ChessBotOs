@@ -14,41 +14,41 @@ MODEL_PATH = os.path.join(BASE_DIR, "models", "best_resnet18_pieces.pth")
 ARUCO_DICT = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
 DETECTOR = cv2.aruco.ArucoDetector(ARUCO_DICT, cv2.aruco.DetectorParameters())
 
-LATO_GRIGLIA_MM = 256.0
-LATO_IMG_PX = 800
-CELL_SIZE = LATO_IMG_PX // 8
+GRID_SIDE_MM = 256.0
+IMG_SIDE_PX = 800
+CELL_SIZE = IMG_SIDE_PX // 8
 OFFSET_MM = 2.0
 
-px_per_mm = LATO_IMG_PX / LATO_GRIGLIA_MM
+px_per_mm = IMG_SIDE_PX / GRID_SIDE_MM
 off_px = OFFSET_MM * px_per_mm
 
-PUNTI_DESTINAZIONE = np.array([
+DST_POINTS = np.array([
     [-off_px, -off_px],
-    [LATO_IMG_PX + off_px, -off_px],
-    [LATO_IMG_PX + off_px, LATO_IMG_PX + off_px],
-    [-off_px, LATO_IMG_PX + off_px],
+    [IMG_SIDE_PX + off_px, -off_px],
+    [IMG_SIDE_PX + off_px, IMG_SIDE_PX + off_px],
+    [-off_px, IMG_SIDE_PX + off_px],
 ], dtype="float32")
 
 SHORT_NAME = {
-    "bianco_torre": "B-T",
-    "bianco_cavallo": "B-C",
-    "bianco_alfiere": "B-A",
-    "bianco_donna": "B-D",
-    "bianco_re": "B-R",
-    "bianco_pedone": "B-P",
-    "nero_torre": "N-T",
-    "nero_cavallo": "N-C",
-    "nero_alfiere": "N-A",
-    "nero_donna": "N-D",
-    "nero_re": "N-R",
-    "nero_pedone": "N-P",
-    "vuota": ".",
+    "white_rook": "W-R",
+    "white_knight": "W-N",
+    "white_bishop": "W-B",
+    "white_queen": "W-Q",
+    "white_king": "W-K",
+    "white_pawn": "W-P",
+    "black_rook": "B-R",
+    "black_knight": "B-N",
+    "black_bishop": "B-B",
+    "black_queen": "B-Q",
+    "black_king": "B-K",
+    "black_pawn": "B-P",
+    "empty": ".",
 }
 
 
 def load_model(model_path: str, device: torch.device) -> tuple[nn.Module, list[str]]:
     if not os.path.exists(model_path):
-        raise FileNotFoundError(f"Modello non trovato: {model_path}. Esegui prima train_resnet18_pieces.py.")
+        raise FileNotFoundError(f"Model not found: {model_path}. Run train_resnet18_pieces.py first.")
 
     ckpt = torch.load(model_path, map_location=device, weights_only=True)
     classes = ckpt["classes"]
@@ -74,25 +74,25 @@ def draw_board_predictions(
             x1, y1 = c * CELL_SIZE, r * CELL_SIZE
             x2, y2 = x1 + CELL_SIZE, y1 + CELL_SIZE
 
-            if label == "vuota":
+            if label == "empty":
                 cv2.rectangle(vis, (x1, y1), (x2, y2), (90, 90, 90), 1)
                 continue
 
-            color = (0, 220, 0) if label.startswith("bianco_") else (0, 200, 255)
+            color = (0, 220, 0) if label.startswith("white_") else (0, 200, 255)
             cv2.rectangle(vis, (x1, y1), (x2, y2), color, 2)
             short = SHORT_NAME.get(label, label)
             cv2.putText(vis, short, (x1 + 8, y1 + 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
             cv2.putText(vis, f"{conf * 100:.0f}%", (x1 + 8, y1 + 54), cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 1)
 
-    cv2.rectangle(vis, (0, 0), (LATO_IMG_PX, 32), (0, 0, 0), -1)
-    cv2.putText(vis, f"ResNet18 (13 classi) | FPS: {fps:.1f} | Q: Esci", (10, 22),
+    cv2.rectangle(vis, (0, 0), (IMG_SIDE_PX, 32), (0, 0, 0), -1)
+    cv2.putText(vis, f"ResNet18 (13 classes) | FPS: {fps:.1f} | Q: Quit", (10, 22),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
     return vis
 
 
 def main() -> None:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Inferenza live (13 classi) su: {device}")
+    print(f"Live inference (13 classes) on: {device}")
 
     model, classes = load_model(MODEL_PATH, device)
     tf = transforms.Compose([
@@ -103,7 +103,7 @@ def main() -> None:
 
     cap = cv2.VideoCapture(0)
     if not cap.isOpened():
-        print("Errore: impossibile aprire la telecamera!")
+        print("Error: unable to open camera!")
         return
 
     prev_t = time.time()
@@ -118,15 +118,15 @@ def main() -> None:
             marker_map = {id_val: corner[0] for corner, id_val in zip(corners, ids.flatten())}
 
             if all(k in marker_map for k in (0, 1, 2, 3)):
-                punti_sorgente = np.array([
+                src_points = np.array([
                     marker_map[0][2],
                     marker_map[1][3],
                     marker_map[2][0],
                     marker_map[3][1],
                 ], dtype="float32")
 
-                M = cv2.getPerspectiveTransform(punti_sorgente, PUNTI_DESTINAZIONE)
-                board_clean = cv2.warpPerspective(frame, M, (LATO_IMG_PX, LATO_IMG_PX))
+                M = cv2.getPerspectiveTransform(src_points, DST_POINTS)
+                board_clean = cv2.warpPerspective(frame, M, (IMG_SIDE_PX, IMG_SIDE_PX))
 
                 batch_tensors = []
                 for r in range(8):
@@ -146,9 +146,9 @@ def main() -> None:
                 fps = 1.0 / max(1e-6, now - prev_t)
                 prev_t = now
 
-                cv2.imshow("Scacchiera ResNet18 (13 classi)", draw_board_predictions(board_clean, preds, fps))
+                cv2.imshow("Chessboard ResNet18 (13 classes)", draw_board_predictions(board_clean, preds, fps))
 
-        cv2.imshow("Telecamera Originale", frame)
+        cv2.imshow("Original Camera", frame)
         if cv2.waitKey(1) & 0xFF in (ord("q"), ord("Q"), 27):
             break
 

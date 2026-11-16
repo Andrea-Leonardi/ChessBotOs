@@ -1,4 +1,5 @@
 import csv
+import glob
 import os
 
 import cv2
@@ -26,7 +27,7 @@ STAGE_LABELS = {
 
 def load_model(model_path: str, device: torch.device) -> tuple[nn.Module, list[str]]:
     if not os.path.exists(model_path):
-        raise FileNotFoundError(f"Modello non trovato: {model_path}")
+        raise FileNotFoundError(f"Model not found: {model_path}")
     ckpt = torch.load(model_path, map_location=device, weights_only=True)
     classes: list[str] = ckpt["classes"]
     model = models.resnet18(weights=None)
@@ -38,21 +39,21 @@ def load_model(model_path: str, device: torch.device) -> tuple[nn.Module, list[s
 
 
 def pick_sample_pieces(csv_path: str, dataset_dir: str, limit: int = 10) -> list[tuple[str, str]]:
-    """Seleziona fino a `limit` celle con pezzi di classi diverse dal dataset."""
+    """Select up to `limit` cells with different piece classes from the dataset."""
     if not os.path.exists(csv_path):
-        raise FileNotFoundError(f"CSV non trovato: {csv_path}")
+        raise FileNotFoundError(f"CSV not found: {csv_path}")
 
     preferred_order = [
-        "bianco_re",
-        "nero_re",
-        "bianco_donna",
-        "nero_donna",
-        "bianco_cavallo",
-        "nero_cavallo",
-        "bianco_torre",
-        "nero_torre",
-        "bianco_alfiere",
-        "nero_pedone",
+        "white_king",
+        "black_king",
+        "white_queen",
+        "black_queen",
+        "white_knight",
+        "black_knight",
+        "white_rook",
+        "black_rook",
+        "white_bishop",
+        "black_pawn",
     ]
     by_class: dict[str, str] = {}
     fallback: list[tuple[str, str]] = []
@@ -61,7 +62,7 @@ def pick_sample_pieces(csv_path: str, dataset_dir: str, limit: int = 10) -> list
         for row in csv.DictReader(f):
             rel = row.get("rel_path", "").strip()
             lbl = row.get("label", "").strip()
-            if not rel or not lbl or lbl == "vuota":
+            if not rel or not lbl or lbl == "empty":
                 continue
             full_path = os.path.join(dataset_dir, rel)
             if not os.path.exists(full_path):
@@ -105,7 +106,7 @@ def compute_cam_overlay(
     pred_idx: int,
     size: int,
 ) -> np.ndarray:
-    """Calcola la Class Activation Map (dove guarda la rete) sovrapposta all'immagine."""
+    """Compute the Class Activation Map (where the network looks) overlaid on the input."""
     weights = fc_weights[pred_idx].detach()
     cam = torch.einsum("c,chw->hw", weights, layer4_feat.squeeze(0))
     cam = torch.relu(cam).cpu().numpy()
@@ -146,7 +147,7 @@ def build_detail_image(
     fc_weights: torch.Tensor,
     pred_idx: int,
 ) -> np.ndarray:
-    """Crea una scheda dettagliata per un singolo pezzo con i 4 canali piu' attivi per layer."""
+    """Build a detailed sheet for a single piece showing the top 4 most active channels per layer."""
     tile = 96
     pad = 10
     top_channels = 4
@@ -164,13 +165,13 @@ def build_detail_image(
     canvas[25:135, pad * 2 + 110:pad * 2 + 220] = cam_tile
 
     cv2.putText(canvas, "Input", (pad, 18), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (220, 220, 220), 1)
-    cv2.putText(canvas, "Dove guarda (CAM)", (pad * 2 + 110, 18), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (100, 220, 255), 1)
+    cv2.putText(canvas, "Where it looks (CAM)", (pad * 2 + 110, 18), cv2.FONT_HERSHEY_SIMPLEX, 0.42, (100, 220, 255), 1)
 
     info_x = pad * 3 + 225
     ok_color = (80, 255, 120) if pred_lbl == true_lbl else (80, 100, 255)
-    cv2.putText(canvas, f"Reale: {true_lbl}", (info_x, 55), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255, 255, 255), 2)
-    cv2.putText(canvas, f"Pred : {pred_lbl} ({conf * 100:.1f}%)", (info_x, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.65, ok_color, 2)
-    cv2.putText(canvas, "Media attivazioni + Top 4 filtri piu' attivi per livello", (info_x, 125),
+    cv2.putText(canvas, f"Actual: {true_lbl}", (info_x, 55), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255, 255, 255), 2)
+    cv2.putText(canvas, f"Pred  : {pred_lbl} ({conf * 100:.1f}%)", (info_x, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.65, ok_color, 2)
+    cv2.putText(canvas, "Mean activation + Top 4 most active filters per layer", (info_x, 125),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.45, (180, 180, 180), 1)
 
     for r_idx, stage in enumerate(STAGE_NAMES):
@@ -182,7 +183,7 @@ def build_detail_image(
 
         mean_bgr = to_heatmap_bgr(mean_map, tile)
         canvas[y0 + 24:y0 + 24 + tile, pad:pad + tile] = mean_bgr
-        cv2.putText(canvas, "Media", (pad + 22, y0 + 24 + tile + 14), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (200, 200, 200), 1)
+        cv2.putText(canvas, "Mean", (pad + 26, y0 + 24 + tile + 14), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (200, 200, 200), 1)
 
         channel_scores = feat.mean(dim=(1, 2))
         top_idxs = torch.topk(channel_scores, k=min(top_channels, feat.shape[0])).indices.tolist()
@@ -198,8 +199,11 @@ def build_detail_image(
 
 def main() -> None:
     os.makedirs(OUT_DIR, exist_ok=True)
+    for old_file in glob.glob(os.path.join(OUT_DIR, "detail_*.png")):
+        os.remove(old_file)
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Generazione visualizzazioni CNN su {device}...")
+    print(f"Generating CNN visualizations on {device}...")
 
     model, classes = load_model(MODEL_PATH, device)
     fc_weights = model.fc.weight.data
@@ -212,7 +216,7 @@ def main() -> None:
 
     samples = pick_sample_pieces(LABELS_CSV, DATASET_DIR, limit=10)
     if not samples:
-        print("Nessun pezzo trovato in labels_pieces.csv.")
+        print("No pieces found in labels_pieces.csv.")
         return
 
     tile = 120
@@ -226,10 +230,10 @@ def main() -> None:
     overview_h = header_h + len(samples) * row_h + pad
     overview = np.full((overview_h, overview_w, 3), 24, dtype=np.uint8)
 
-    col_titles = ["Input", "Conv1 (112)", "Layer1 (56)", "Layer2 (28)", "Layer3 (14)", "Layer4 (7)", "Dove guarda"]
+    col_titles = ["Input", "Conv1 (112)", "Layer1 (56)", "Layer2 (28)", "Layer3 (14)", "Layer4 (7)", "Where it looks"]
     for c_idx, title in enumerate(col_titles):
         x0 = label_col_w + c_idx * (tile + pad)
-        cv2.putText(overview, title, (x0 + 4, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.48, (255, 220, 120), 1)
+        cv2.putText(overview, title, (x0 + 4, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.46, (255, 220, 120), 1)
 
     for row_idx, (img_path, true_lbl) in enumerate(samples):
         orig_bgr = cv2.imread(img_path)
@@ -271,7 +275,7 @@ def main() -> None:
 
     overview_path = os.path.join(OUT_DIR, "overview_10_pieces.png")
     cv2.imwrite(overview_path, overview)
-    print(f"Fatto! Immagini salvate in: {OUT_DIR}")
+    print(f"Done! Images saved to: {OUT_DIR}")
 
 
 if __name__ == "__main__":

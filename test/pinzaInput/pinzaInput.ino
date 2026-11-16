@@ -10,9 +10,9 @@ void setup() {
   Serial.begin(9600);
 
   myservo.attach(servoPin, minPulse, maxPulse);
-  myservo.writeMicroseconds(1500); // Posizione iniziale: 135°
+  myservo.writeMicroseconds(1500); // Initial position: 135 deg
 
-  Serial.println("Inserisci un angolo tra 0 e 270:");
+  Serial.println("Enter an angle between 0 and 270:");
 }
 
 void loop() {
@@ -25,24 +25,24 @@ void loop() {
 
     for (int i = 0; i < input.length(); i++) {
       if (!isDigit(input[i])) {
-        Serial.println("Inserisci un numero valido.");
+        Serial.println("Please enter a valid number.");
         return;
       }
     }
 
-    int angolo = input.toInt();
+    int angle = input.toInt();
 
-    if (angolo >= 0 && angolo <= 270) {
+    if (angle >= 0 && angle <= 270) {
 
-      int pulse = map(angolo, 0, 270, minPulse, maxPulse);
+      int pulse = map(angle, 0, 270, minPulse, maxPulse);
       myservo.writeMicroseconds(pulse);
 
-      Serial.print("Servo posizionato a: ");
-      Serial.print(angolo);
-      Serial.println(" gradi");
+      Serial.print("Servo moved to: ");
+      Serial.print(angle);
+      Serial.println(" degrees");
 
     } else {
-      Serial.println("Errore: inserisci un angolo tra 0 e 270.");
+      Serial.println("Error: enter an angle between 0 and 270.");
     }
   }
 }

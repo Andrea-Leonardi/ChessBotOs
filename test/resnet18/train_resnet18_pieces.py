@@ -16,19 +16,19 @@ LABELS_CSV = os.path.join(DATASET_DIR, "labels_pieces.csv")
 MODEL_OUT = os.path.join(BASE_DIR, "models", "best_resnet18_pieces.pth")
 
 CLASSES = [
-    "bianco_alfiere",
-    "bianco_cavallo",
-    "bianco_donna",
-    "bianco_pedone",
-    "bianco_re",
-    "bianco_torre",
-    "nero_alfiere",
-    "nero_cavallo",
-    "nero_donna",
-    "nero_pedone",
-    "nero_re",
-    "nero_torre",
-    "vuota",
+    "black_bishop",
+    "black_king",
+    "black_knight",
+    "black_pawn",
+    "black_queen",
+    "black_rook",
+    "empty",
+    "white_bishop",
+    "white_king",
+    "white_knight",
+    "white_pawn",
+    "white_queen",
+    "white_rook",
 ]
 CLASS_TO_IDX = {c: i for i, c in enumerate(CLASSES)}
 
@@ -47,7 +47,7 @@ def set_seed(seed: int) -> None:
 
 def load_samples(csv_path: str, dataset_dir: str) -> list[tuple[str, int]]:
     if not os.path.exists(csv_path):
-        raise FileNotFoundError(f"File non trovato: {csv_path}")
+        raise FileNotFoundError(f"File not found: {csv_path}")
 
     samples: list[tuple[str, int]] = []
     with open(csv_path, "r", newline="", encoding="utf-8") as f:
@@ -145,7 +145,7 @@ def evaluate(
 
 
 def safe_torch_save(obj: dict, path: str, retries: int = 8, delay: float = 0.5) -> None:
-    """Salva su file temporaneo e sostituisce in modo atomico (evita lock di OneDrive/Windows)."""
+    """Save to a temporary file and atomically replace (avoids OneDrive/Windows file locks)."""
     os.makedirs(os.path.dirname(path), exist_ok=True)
     tmp_path = f"{path}.tmp"
     for attempt in range(1, retries + 1):
@@ -161,7 +161,7 @@ def safe_torch_save(obj: dict, path: str, retries: int = 8, delay: float = 0.5) 
                     pass
             if attempt == retries:
                 raise RuntimeError(
-                    f"Impossibile salvare {path} (file bloccato da OneDrive o da un altro script aperto): {exc}"
+                    f"Unable to save {path} (file locked by OneDrive or another running script): {exc}"
                 ) from exc
             time.sleep(delay)
 
@@ -170,13 +170,13 @@ def main() -> None:
     set_seed(SEED)
 
     if not torch.cuda.is_available():
-        raise RuntimeError("CUDA non disponibile!")
+        raise RuntimeError("CUDA not available!")
 
     device = torch.device("cuda")
-    print(f"Device in uso: {device} ({torch.cuda.get_device_name(0)})")
+    print(f"Device: {device} ({torch.cuda.get_device_name(0)})")
 
     samples = load_samples(LABELS_CSV, DATASET_DIR)
-    print(f"Totale immagini caricate: {len(samples)}")
+    print(f"Total images loaded: {len(samples)}")
     counts = Counter(lbl for _, lbl in samples)
     for k in sorted(counts.keys()):
         print(f"  {CLASSES[k]:<15}: {counts[k]}")
@@ -275,17 +275,17 @@ def main() -> None:
             f"Val Loss: {val_loss:.4f} Acc: {val_acc * 100:6.2f}%{marker}"
         )
 
-    print("\n=== RISULTATI FINALI (BEST MODEL - 13 CLASSI) ===")
+    print("\n=== FINAL RESULTS (BEST MODEL - 13 CLASSES) ===")
     print(f"Best Validation Accuracy: {best_val_acc * 100:.2f}%")
-    print(f"Modello salvato in: {MODEL_OUT}")
+    print(f"Model saved to: {MODEL_OUT}")
 
     if best_errors:
-        print(f"\nErrori sul validation set ({len(best_errors)}):")
+        print(f"\nValidation errors ({len(best_errors)}):")
         for path, t, p in best_errors:
             rel = os.path.relpath(path, DATASET_DIR)
-            print(f"  {rel}: reale={CLASSES[t]} -> predetto={CLASSES[p]}")
+            print(f"  {rel}: actual={CLASSES[t]} -> predicted={CLASSES[p]}")
     else:
-        print("\nZero errori sul validation set!")
+        print("\nZero errors on the validation set!")
 
 
 if __name__ == "__main__":

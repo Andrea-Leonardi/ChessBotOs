@@ -15,23 +15,23 @@ LABELS_3CLS_CSV = os.path.join(DATASET_DIR, "labels.csv")
 LABELS_13CLS_CSV = os.path.join(DATASET_DIR, "labels_pieces.csv")
 MODEL_13CLS_PATH = os.path.abspath(os.path.join(BASE_DIR, "..", "resnet18", "models", "best_resnet18_pieces.pth"))
 
-COLONNE = "abcdefgh"
-TRAVERSE = "87654321"
-PIECE_TYPES = ("torre", "cavallo", "alfiere", "donna", "re", "pedone")
+FILES = "abcdefgh"
+RANKS = "87654321"
+PIECE_TYPES = ("rook", "knight", "bishop", "queen", "king", "pawn")
 
 KEY_TO_PIECE = {
-    ord("t"): "torre",
-    ord("T"): "torre",
-    ord("c"): "cavallo",
-    ord("C"): "cavallo",
-    ord("a"): "alfiere",
-    ord("A"): "alfiere",
-    ord("d"): "donna",
-    ord("D"): "donna",
-    ord("r"): "re",
-    ord("R"): "re",
-    ord("p"): "pedone",
-    ord("P"): "pedone",
+    ord("r"): "rook",
+    ord("R"): "rook",
+    ord("n"): "knight",
+    ord("N"): "knight",
+    ord("b"): "bishop",
+    ord("B"): "bishop",
+    ord("q"): "queen",
+    ord("Q"): "queen",
+    ord("k"): "king",
+    ord("K"): "king",
+    ord("p"): "pawn",
+    ord("P"): "pawn",
 }
 
 
@@ -58,13 +58,13 @@ def save_csv_map(csv_path: str, data: dict[str, str]) -> None:
 
 
 def sync_3cls_label(label_13: str) -> str:
-    if label_13 == "vuota":
-        return "vuota"
+    if label_13 == "empty":
+        return "empty"
     return label_13.split("_", 1)[0]
 
 
 def find_missing_cells(dataset_dir: str, labels_13cls: dict[str, str]) -> list[tuple[str, str]]:
-    """Trova celle esistenti su disco in scatto_XXXX ma assenti da labels_pieces.csv."""
+    """Find cell images on disk in scatto_XXXX that are missing from labels_pieces.csv."""
     missing: list[tuple[str, str]] = []
     if not os.path.exists(dataset_dir):
         return missing
@@ -75,18 +75,20 @@ def find_missing_cells(dataset_dir: str, labels_13cls: dict[str, str]) -> list[t
             continue
         for r in range(8):
             for c in range(8):
-                fname = f"{scatto}_{COLONNE[c]}{TRAVERSE[r]}.png"
+                fname = f"{scatto}_{FILES[c]}{RANKS[r]}.png"
                 rel_path = f"{scatto}/{fname}"
                 if os.path.exists(os.path.join(scatto_dir, fname)) and rel_path not in labels_13cls:
-                    missing.append((rel_path, "Cella mancante dal CSV"))
+                    missing.append((rel_path, "Missing from CSV"))
     return missing
 
 
 def find_anomalous_shot_cells(labels_13cls: dict[str, str]) -> list[tuple[str, str]]:
-    """Individua le celle appartenenti a tipi di pezzo sbilanciati tra bianco e nero per singolo scatto."""
+    """Find cells belonging to piece types imbalanced between white and black per capture."""
     by_shot: dict[str, list[tuple[str, str]]] = defaultdict(list)
     for rel_path, lbl in labels_13cls.items():
         shot = rel_path.split("/")[0]
+        if not shot.startswith("scatto_"):
+            continue
         by_shot[shot].append((rel_path, lbl))
 
     flagged: list[tuple[str, str]] = []
@@ -95,13 +97,13 @@ def find_anomalous_shot_cells(labels_13cls: dict[str, str]) -> list[tuple[str, s
         counts = Counter(lbl for _, lbl in items)
         imbalanced_pieces = [
             p for p in PIECE_TYPES
-            if counts.get(f"bianco_{p}", 0) != counts.get(f"nero_{p}", 0)
+            if counts.get(f"white_{p}", 0) != counts.get(f"black_{p}", 0)
         ]
         if not imbalanced_pieces and len(items) == 64:
             continue
 
-        suspect_labels = {f"bianco_{p}" for p in imbalanced_pieces} | {f"nero_{p}" for p in imbalanced_pieces}
-        reason = f"{shot}: sbilanciato ({', '.join(imbalanced_pieces) or 'conteggio != 64'})"
+        suspect_labels = {f"white_{p}" for p in imbalanced_pieces} | {f"black_{p}" for p in imbalanced_pieces}
+        reason = f"{shot}: imbalanced ({', '.join(imbalanced_pieces) or 'count != 64'})"
         for rel_path, lbl in sorted(items):
             if lbl in suspect_labels:
                 flagged.append((rel_path, reason))
@@ -114,9 +116,9 @@ def find_model_disagreements(
     model_path: str,
     min_conf: float = 0.65,
 ) -> list[tuple[str, str]]:
-    """Esegue inferenza con ResNet18 (13 classi) e segnala i disaccordi ordinati per confidenza."""
+    """Run ResNet18 (13 classes) inference and flag disagreements sorted by confidence."""
     if not os.path.exists(model_path):
-        print(f"Modello 13 classi non trovato ({model_path}), salto il controllo disaccordi.")
+        print(f"13-class model not found ({model_path}), skipping disagreement check.")
         return []
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -155,14 +157,14 @@ def find_model_disagreements(
                 pred_lbl = classes[pidx.item()]
                 conf_val = float(conf.item())
                 if pred_lbl != human_lbl and conf_val >= min_conf:
-                    disagreements.append((conf_val, rel_path, f"Modello: {pred_lbl} ({conf_val * 100:.0f}%)"))
+                    disagreements.append((conf_val, rel_path, f"Model: {pred_lbl} ({conf_val * 100:.0f}%)"))
 
     disagreements.sort(key=lambda x: x[0], reverse=True)
     return [(rel_path, reason) for _, rel_path, reason in disagreements]
 
 
 def build_review_queue(dataset_dir: str, labels_13cls: dict[str, str], model_path: str) -> list[tuple[str, str]]:
-    """Unisce celle mancanti, anomalie per scatto e disaccordi del modello evitando duplicati."""
+    """Merge missing cells, per-shot anomalies, and model disagreements without duplicates."""
     merged: dict[str, list[str]] = {}
     for source in (
         find_missing_cells(dataset_dir, labels_13cls),
@@ -183,7 +185,7 @@ def review_cells(
     labels_3cls: dict[str, str],
     labels_13cls: dict[str, str],
 ) -> int:
-    win_name = "ReviewLabels - Correzione Rapida"
+    win_name = "ReviewLabels - Quick Fix"
     display_size = 420
     banner_h = 150
     idx = 0
@@ -197,14 +199,14 @@ def review_cells(
             idx += 1
             continue
 
-        current_lbl = labels_13cls.get(rel_path, "MANCANTE")
+        current_lbl = labels_13cls.get(rel_path, "MISSING")
         if active_color is None:
-            if current_lbl.startswith("bianco_"):
-                active_color = "bianco"
-            elif current_lbl.startswith("nero_"):
-                active_color = "nero"
+            if current_lbl.startswith("white_"):
+                active_color = "white"
+            elif current_lbl.startswith("black_"):
+                active_color = "black"
             else:
-                active_color = "bianco"
+                active_color = "white"
 
         zoomed = cv2.resize(img, (display_size, display_size), interpolation=cv2.INTER_LINEAR)
         canvas = np.zeros((display_size + banner_h, display_size, 3), dtype=np.uint8)
@@ -212,44 +214,44 @@ def review_cells(
 
         cv2.putText(canvas, f"[{idx + 1}/{len(queue)}] {rel_path}", (10, display_size + 25),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.55, (255, 255, 255), 1)
-        cv2.putText(canvas, f"Attuale: {current_lbl} | Colore attivo: {active_color.upper()}",
-                    (10, display_size + 55), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 255, 255), 2)
+        cv2.putText(canvas, f"Current: {current_lbl} | Color: {active_color.upper()}",
+                    (10, display_size + 55), cv2.FONT_HERSHEY_SIMPLEX, 0.52, (0, 255, 255), 2)
         cv2.putText(canvas, reason[:54], (10, display_size + 82),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.45, (100, 220, 255), 1)
-        cv2.putText(canvas, "T/C/A/D/R/P: Pezzo | B/N: Colore | V: Vuota",
+        cv2.putText(canvas, "R/N/B/Q/K/P: Piece | W/C: Color | E: Empty",
                     (10, display_size + 112), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (200, 200, 200), 1)
-        cv2.putText(canvas, "SPAZIO/INVIO: Conferma | Z: Indietro | Q: Salva ed Esci",
-                    (10, display_size + 136), cv2.FONT_HERSHEY_SIMPLEX, 0.43, (150, 255, 150), 1)
+        cv2.putText(canvas, "SPACE/ENTER: Confirm | Z: Back | X/ESC: Save & Quit",
+                    (10, display_size + 136), cv2.FONT_HERSHEY_SIMPLEX, 0.42, (150, 255, 150), 1)
 
         cv2.imshow(win_name, canvas)
         key = cv2.waitKey(0) & 0xFF
 
-        if key in (ord("q"), ord("Q"), 27):
+        if key in (ord("x"), ord("X"), 27):
             break
         elif key in (ord("z"), ord("Z")):
             idx = max(0, idx - 1)
             active_color = None
-        elif key in (32, 13):  # SPAZIO o INVIO: conferma attuale
+        elif key in (32, 13):  # SPACE or ENTER: confirm current
             idx += 1
             active_color = None
-        elif key in (ord("b"), ord("B")):
-            active_color = "bianco"
+        elif key in (ord("w"), ord("W")):
+            active_color = "white"
             if "_" in current_lbl:
-                new_lbl = f"bianco_{current_lbl.split('_', 1)[1]}"
+                new_lbl = f"white_{current_lbl.split('_', 1)[1]}"
                 labels_13cls[rel_path] = new_lbl
-                labels_3cls[rel_path] = "bianco"
+                labels_3cls[rel_path] = "white"
                 changes += 1
-        elif key in (ord("n"), ord("N")):
-            active_color = "nero"
+        elif key in (ord("c"), ord("C")):
+            active_color = "black"
             if "_" in current_lbl:
-                new_lbl = f"nero_{current_lbl.split('_', 1)[1]}"
+                new_lbl = f"black_{current_lbl.split('_', 1)[1]}"
                 labels_13cls[rel_path] = new_lbl
-                labels_3cls[rel_path] = "nero"
+                labels_3cls[rel_path] = "black"
                 changes += 1
-        elif key in (ord("v"), ord("V")):
-            if current_lbl != "vuota":
-                labels_13cls[rel_path] = "vuota"
-                labels_3cls[rel_path] = "vuota"
+        elif key in (ord("e"), ord("E")):
+            if current_lbl != "empty":
+                labels_13cls[rel_path] = "empty"
+                labels_3cls[rel_path] = "empty"
                 changes += 1
             idx += 1
             active_color = None
@@ -272,18 +274,18 @@ def main() -> None:
 
     queue = build_review_queue(DATASET_DIR, labels_13cls, MODEL_13CLS_PATH)
     if not queue:
-        print("Nessuna cella sospetta trovata: il dataset sembra coerente!")
+        print("No suspect cells found: the dataset looks consistent!")
         return
 
-    print(f"Trovate {len(queue)} celle sospette da verificare.")
+    print(f"Found {len(queue)} suspect cells to review.")
     changes = review_cells(queue, DATASET_DIR, labels_3cls, labels_13cls)
 
     if changes > 0:
         save_csv_map(LABELS_13CLS_CSV, labels_13cls)
         save_csv_map(LABELS_3CLS_CSV, labels_3cls)
-        print(f"Salvate {changes} modifiche in labels_pieces.csv e labels.csv.")
+        print(f"Saved {changes} changes to labels_pieces.csv and labels.csv.")
     else:
-        print("Nessuna modifica effettuata.")
+        print("No changes made.")
 
 
 if __name__ == "__main__":

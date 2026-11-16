@@ -17,37 +17,37 @@ LABELS_13CLS_CSV = os.path.join(DATASET_DIR, "labels_pieces.csv")
 ARUCO_DICT = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
 DETECTOR = cv2.aruco.ArucoDetector(ARUCO_DICT, cv2.aruco.DetectorParameters())
 
-LATO_GRIGLIA_MM = 256.0
-LATO_IMG_PX = 800
-CELL_SIZE = LATO_IMG_PX // 8
+GRID_SIDE_MM = 256.0
+IMG_SIDE_PX = 800
+CELL_SIZE = IMG_SIDE_PX // 8
 OFFSET_MM = 2.0
 
-px_per_mm = LATO_IMG_PX / LATO_GRIGLIA_MM
+px_per_mm = IMG_SIDE_PX / GRID_SIDE_MM
 off_px = OFFSET_MM * px_per_mm
 
-PUNTI_DESTINAZIONE = np.array([
+DST_POINTS = np.array([
     [-off_px, -off_px],
-    [LATO_IMG_PX + off_px, -off_px],
-    [LATO_IMG_PX + off_px, LATO_IMG_PX + off_px],
-    [-off_px, LATO_IMG_PX + off_px],
+    [IMG_SIDE_PX + off_px, -off_px],
+    [IMG_SIDE_PX + off_px, IMG_SIDE_PX + off_px],
+    [-off_px, IMG_SIDE_PX + off_px],
 ], dtype="float32")
 
-COLONNE = "abcdefgh"
-TRAVERSE = "87654321"
+FILES = "abcdefgh"
+RANKS = "87654321"
 
 KEY_TO_PIECE = {
-    ord("t"): "torre",
-    ord("T"): "torre",
-    ord("c"): "cavallo",
-    ord("C"): "cavallo",
-    ord("a"): "alfiere",
-    ord("A"): "alfiere",
-    ord("d"): "donna",
-    ord("D"): "donna",
-    ord("r"): "re",
-    ord("R"): "re",
-    ord("p"): "pedone",
-    ord("P"): "pedone",
+    ord("r"): "rook",
+    ord("R"): "rook",
+    ord("n"): "knight",
+    ord("N"): "knight",
+    ord("b"): "bishop",
+    ord("B"): "bishop",
+    ord("q"): "queen",
+    ord("Q"): "queen",
+    ord("k"): "king",
+    ord("K"): "king",
+    ord("p"): "pawn",
+    ord("P"): "pawn",
 }
 
 
@@ -91,7 +91,7 @@ def next_capture_index(dataset_dir: str) -> int:
 
 def load_3class_model(model_path: str, device: torch.device) -> tuple[nn.Module, list[str]]:
     if not os.path.exists(model_path):
-        raise FileNotFoundError(f"Modello 3 classi non trovato: {model_path}")
+        raise FileNotFoundError(f"3-class model not found: {model_path}")
     ckpt = torch.load(model_path, map_location=device, weights_only=True)
     classes = ckpt["classes"]
     model = models.resnet18(weights=None)
@@ -133,7 +133,7 @@ def save_board_cells(board_bgr: np.ndarray, dataset_dir: str, capture_idx: int) 
         for c in range(8):
             x1, y1 = c * CELL_SIZE, r * CELL_SIZE
             cell_img = board_bgr[y1:y1 + CELL_SIZE, x1:x1 + CELL_SIZE]
-            square_name = f"{COLONNE[c]}{TRAVERSE[r]}"
+            square_name = f"{FILES[c]}{RANKS[r]}"
             fname = f"{capture_name}_{square_name}.png"
             full_path = os.path.join(capture_dir, fname)
             cv2.imwrite(full_path, cell_img)
@@ -147,8 +147,8 @@ def label_non_empty_cells(
     labels_3cls: dict[str, str],
     labels_13cls: dict[str, str],
 ) -> None:
-    """Mostra una finestra rapida per etichettare solo le celle rilevate come non vuote."""
-    win_name = "Etichetta Celle Rilevate"
+    """Display a quick window to label only cells detected as non-empty."""
+    win_name = "Label Detected Pieces"
     display_size = 380
     banner_h = 120
     idx = 0
@@ -158,21 +158,16 @@ def label_non_empty_cells(
         zoomed = cv2.resize(img, (display_size, display_size), interpolation=cv2.INTER_LINEAR)
         canvas = np.zeros((display_size + banner_h, display_size, 3), dtype=np.uint8)
         canvas[:display_size, :] = zoomed
-        cv2.rectangle(canvas, (0, display_size), (display_size, display_size + banner_h), (30, 30, 30), -1)
 
+        col = (0, 220, 0) if pred_color == "white" else (0, 180, 255)
         cv2.putText(canvas, f"[{idx + 1}/{len(non_empty)}] {rel_path}", (10, display_size + 22),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 255), 1, cv2.LINE_AA)
-
-        col_bgr = (255, 220, 0) if pred_color == "bianco" else (0, 140, 255)
-        cv2.putText(canvas, f"Rilevato: {pred_color.upper()}", (10, display_size + 46),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.55, col_bgr, 1, cv2.LINE_AA)
-
-        cv2.putText(canvas, "T:Torre C:Cavallo A:Alfiere", (10, display_size + 72),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.46, (210, 210, 210), 1, cv2.LINE_AA)
-        cv2.putText(canvas, "D:Donna R:Re P:Pedone | V:Vuota", (10, display_size + 92),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.46, (210, 210, 210), 1, cv2.LINE_AA)
-        cv2.putText(canvas, "Z:Indietro | B/N:Cambia Colore | Q:Fine", (10, display_size + 112),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.40, (150, 150, 150), 1, cv2.LINE_AA)
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 255), 1)
+        cv2.putText(canvas, f"Detected color: {pred_color.upper()} (W/C to change)", (10, display_size + 46),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.46, col, 1)
+        cv2.putText(canvas, "R:Rook N:Knight B:Bishop Q:Queen K:King P:Pawn", (10, display_size + 74),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.40, (220, 220, 220), 1)
+        cv2.putText(canvas, "E:Empty | Z:Back | X/ESC:Done", (10, display_size + 100),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.45, (180, 180, 180), 1)
 
         cv2.imshow(win_name, canvas)
         key = cv2.waitKey(0) & 0xFF
@@ -183,23 +178,20 @@ def label_non_empty_cells(
             labels_13cls[rel_path] = f"{pred_color}_{piece}"
             save_csv_map(LABELS_3CLS_CSV, labels_3cls)
             save_csv_map(LABELS_13CLS_CSV, labels_13cls)
-            print(f"  -> {rel_path}: {pred_color}_{piece}")
             idx += 1
-        elif key in (ord("v"), ord("V")):
-            labels_3cls[rel_path] = "vuota"
-            labels_13cls[rel_path] = "vuota"
+        elif key in (ord("e"), ord("E")):
+            labels_3cls[rel_path] = "empty"
+            labels_13cls[rel_path] = "empty"
             save_csv_map(LABELS_3CLS_CSV, labels_3cls)
             save_csv_map(LABELS_13CLS_CSV, labels_13cls)
-            print(f"  -> {rel_path}: vuota (corretto)")
             idx += 1
-        elif key in (ord("b"), ord("B")):
-            non_empty[idx] = (rel_path, img, "bianco")
-        elif key in (ord("n"), ord("N")):
-            non_empty[idx] = (rel_path, img, "nero")
-        elif key in (ord("z"), ord("Z"), 8):
-            if idx > 0:
-                idx -= 1
-        elif key in (ord("q"), ord("Q"), 27):
+        elif key in (ord("w"), ord("W")):
+            non_empty[idx] = (rel_path, img, "white")
+        elif key in (ord("c"), ord("C")):
+            non_empty[idx] = (rel_path, img, "black")
+        elif key in (ord("z"), ord("Z")):
+            idx = max(0, idx - 1)
+        elif key in (ord("x"), ord("X"), 27):
             break
 
     cv2.destroyWindow(win_name)
@@ -207,28 +199,23 @@ def label_non_empty_cells(
 
 def draw_live_overlay(board_bgr: np.ndarray, preds: list[str], status_msg: str) -> np.ndarray:
     vis = board_bgr.copy()
-    for idx, lbl in enumerate(preds):
-        r, c = divmod(idx, 8)
-        x1, y1 = c * CELL_SIZE, r * CELL_SIZE
-        x2, y2 = x1 + CELL_SIZE, y1 + CELL_SIZE
-        if lbl == "bianco":
-            color = (255, 220, 0)
-        elif lbl == "nero":
-            color = (0, 140, 255)
-        else:
-            color = (0, 180, 0)
-        cv2.rectangle(vis, (x1, y1), (x2, y2), color, 2 if lbl != "vuota" else 1)
+    for r in range(8):
+        for c in range(8):
+            pred = preds[r * 8 + c]
+            x1, y1 = c * CELL_SIZE, r * CELL_SIZE
+            color = (0, 220, 0) if pred == "white" else ((0, 180, 255) if pred == "black" else (90, 90, 90))
+            cv2.rectangle(vis, (x1, y1), (x1 + CELL_SIZE, y1 + CELL_SIZE), color, 2 if pred != "empty" else 1)
+            if pred != "empty":
+                cv2.putText(vis, pred[0].upper(), (x1 + 8, y1 + 26), cv2.FONT_HERSHEY_SIMPLEX, 0.65, color, 2)
 
-    if status_msg:
-        cv2.rectangle(vis, (0, 0), (540, 30), (15, 15, 15), -1)
-        cv2.putText(vis, status_msg, (8, 22), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 255, 180), 1, cv2.LINE_AA)
+    cv2.rectangle(vis, (0, 0), (IMG_SIDE_PX, 32), (0, 0, 0), -1)
+    cv2.putText(vis, status_msg, (10, 22), cv2.FONT_HERSHEY_SIMPLEX, 0.58, (255, 255, 255), 2)
     return vis
 
 
 def main() -> None:
-    os.makedirs(DATASET_DIR, exist_ok=True)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"SmartPieceCollector su {device}")
+    print(f"SmartPieceCollector on {device}")
 
     model_3cls, classes_3cls = load_3class_model(MODEL_3CLS_PATH, device)
     tf = transforms.Compose([
@@ -241,16 +228,16 @@ def main() -> None:
     labels_13cls = load_csv_map(LABELS_13CLS_CSV)
     capture_idx = next_capture_index(DATASET_DIR)
 
-    cap = cv2.VideoCapture(0)  # Cambia 0 con 1 o con l'URL IP se usi una camera esterna
+    cap = cv2.VideoCapture(0)  # Change 0 to 1 or an IP URL if using an external camera
     if not cap.isOpened():
-        print("Errore: impossibile aprire la telecamera!")
+        print("Error: unable to open camera!")
         return
 
-    print("Comandi:")
-    print("  [SPAZIO] -> Scatta, auto-classifica le vuote ed etichetta solo i pezzi rilevati")
-    print("  [Q]      -> Esci")
+    print("Controls:")
+    print("  [SPACE] -> Capture, auto-save empty cells, and label only detected pieces")
+    print("  [X/ESC] -> Quit")
 
-    status_msg = "SPAZIO: Scatta & Etichetta | Q: Esci"
+    status_msg = "SPACE: Capture & Label | X: Quit"
     status_until = 0.0
 
     while True:
@@ -267,23 +254,23 @@ def main() -> None:
             marker_map = {id_val: corner[0] for corner, id_val in zip(corners, ids.flatten())}
 
             if all(k in marker_map for k in (0, 1, 2, 3)):
-                punti_sorgente = np.array([
+                src_points = np.array([
                     marker_map[0][2],
                     marker_map[1][3],
                     marker_map[2][0],
                     marker_map[3][1],
                 ], dtype="float32")
 
-                M = cv2.getPerspectiveTransform(punti_sorgente, PUNTI_DESTINAZIONE)
-                board_clean = cv2.warpPerspective(frame, M, (LATO_IMG_PX, LATO_IMG_PX))
+                M = cv2.getPerspectiveTransform(src_points, DST_POINTS)
+                board_clean = cv2.warpPerspective(frame, M, (IMG_SIDE_PX, IMG_SIDE_PX))
                 preds_3cls = classify_cells_3cls(board_clean, model_3cls, classes_3cls, tf, device)
 
-                n_pieces = sum(1 for p in preds_3cls if p != "vuota")
-                msg = status_msg if time.time() < status_until else f"Pezzi rilevati: {n_pieces} | SPAZIO: Scatta"
+                n_pieces = sum(1 for p in preds_3cls if p != "empty")
+                msg = status_msg if time.time() < status_until else f"Detected pieces: {n_pieces} | SPACE: Capture"
                 vis = draw_live_overlay(board_clean, preds_3cls, msg)
-                cv2.imshow("SmartPieceCollector - Scacchiera", vis)
+                cv2.imshow("SmartPieceCollector - Board", vis)
 
-        cv2.imshow("Telecamera Originale", frame)
+        cv2.imshow("Original Camera", frame)
         key = cv2.waitKey(1) & 0xFF
 
         if key == ord(" "):
@@ -293,27 +280,27 @@ def main() -> None:
                 auto_empty = 0
 
                 for (rel_path, cell_img), pred_lbl in zip(saved_cells, preds_3cls):
-                    if pred_lbl == "vuota":
-                        labels_3cls[rel_path] = "vuota"
-                        labels_13cls[rel_path] = "vuota"
+                    if pred_lbl == "empty":
+                        labels_3cls[rel_path] = "empty"
+                        labels_13cls[rel_path] = "empty"
                         auto_empty += 1
                     else:
                         non_empty.append((rel_path, cell_img, pred_lbl))
 
                 save_csv_map(LABELS_3CLS_CSV, labels_3cls)
                 save_csv_map(LABELS_13CLS_CSV, labels_13cls)
-                print(f"[scatto_{capture_idx:04d}] Vuote auto: {auto_empty} | Da etichettare: {len(non_empty)}")
+                print(f"[scatto_{capture_idx:04d}] Auto-empty: {auto_empty} | To label: {len(non_empty)}")
 
                 if non_empty:
                     label_non_empty_cells(non_empty, labels_3cls, labels_13cls)
 
-                status_msg = f"Salvato scatto_{capture_idx:04d} ({len(non_empty)} pezzi)"
+                status_msg = f"Saved scatto_{capture_idx:04d} ({len(non_empty)} pieces)"
                 status_until = time.time() + 2.5
                 capture_idx += 1
             else:
-                status_msg = "Marker 0,1,2,3 non tutti visibili!"
+                status_msg = "Markers 0,1,2,3 not all visible!"
                 status_until = time.time() + 2.0
-        elif key == ord("q") or key == 27:
+        elif key in (ord("x"), ord("X"), 27):
             break
 
     cap.release()

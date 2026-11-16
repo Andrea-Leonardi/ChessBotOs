@@ -3,36 +3,36 @@ import time
 import cv2
 import numpy as np
 
-# 1. Configurazione ArUco (identica a MakerIdentification.py)
+# 1. ArUco configuration (identical to MakerIdentification.py)
 ARUCO_DICT = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
 DETECTOR = cv2.aruco.ArucoDetector(ARUCO_DICT, cv2.aruco.DetectorParameters())
 
-# 2. Parametri fisici della scacchiera (in mm e pixel)
-LATO_GRIGLIA_MM = 256.0  # 8 caselle da 32 mm
-LATO_IMG_PX = 800        # Immagine raddrizzata 800x800 (100 px per casella)
-CELL_SIZE = LATO_IMG_PX // 8
-OFFSET_MM = 2.0          # Bordino bianco di 2 mm attorno alla griglia
+# 2. Physical chessboard parameters (in mm and pixels)
+GRID_SIDE_MM = 256.0  # 8 squares of 32 mm
+IMG_SIDE_PX = 800     # Warped image 800x800 (100 px per square)
+CELL_SIZE = IMG_SIDE_PX // 8
+OFFSET_MM = 2.0       # 2 mm white border around the grid
 
-px_per_mm = LATO_IMG_PX / LATO_GRIGLIA_MM
+px_per_mm = IMG_SIDE_PX / GRID_SIDE_MM
 off_px = OFFSET_MM * px_per_mm
 
-PUNTI_DESTINAZIONE = np.array([
-    [-off_px, -off_px],                           # Marker 0 (a8 - alto sx)
-    [LATO_IMG_PX + off_px, -off_px],              # Marker 1 (h8 - alto dx)
-    [LATO_IMG_PX + off_px, LATO_IMG_PX + off_px], # Marker 2 (h1 - basso dx)
-    [-off_px, LATO_IMG_PX + off_px]               # Marker 3 (a1 - basso sx)
+DST_POINTS = np.array([
+    [-off_px, -off_px],                           # Marker 0 (a8 - top left)
+    [IMG_SIDE_PX + off_px, -off_px],              # Marker 1 (h8 - top right)
+    [IMG_SIDE_PX + off_px, IMG_SIDE_PX + off_px], # Marker 2 (h1 - bottom right)
+    [-off_px, IMG_SIDE_PX + off_px],              # Marker 3 (a1 - bottom left)
 ], dtype="float32")
 
-COLONNE = "abcdefgh"
-TRAVERSE = "87654321"
+FILES = "abcdefgh"
+RANKS = "87654321"
 
-# Cartella di output nella root del progetto (ChessBotOs/datasets)
+# Output directory at project root (ChessBotOs/datasets)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATASET_DIR = os.path.abspath(os.path.join(BASE_DIR, "..", "..", "datasets"))
 
 
 def next_capture_index(dataset_dir: str) -> int:
-    """Trova il prossimo indice progressivo libero in dataset_dir per non sovrascrivere scatti."""
+    """Find the next available progressive capture index in dataset_dir."""
     if not os.path.exists(dataset_dir):
         return 1
     existing = [
@@ -49,12 +49,12 @@ def next_capture_index(dataset_dir: str) -> int:
 
 
 def save_board_cells(board_img: np.ndarray, dataset_dir: str, capture_idx: int) -> str:
-    """Salva l'immagine intera raddrizzata e le 64 mini-immagini (100x100) una per casella."""
+    """Save the full warped board and the 64 cell images (100x100)."""
     capture_name = f"scatto_{capture_idx:04d}"
     capture_dir = os.path.join(dataset_dir, capture_name)
     os.makedirs(capture_dir, exist_ok=True)
 
-    # Salva la scacchiera raddrizzata completa come riferimento
+    # Save full warped board as reference
     cv2.imwrite(os.path.join(capture_dir, f"{capture_name}_full.png"), board_img)
 
     for r in range(8):
@@ -62,7 +62,7 @@ def save_board_cells(board_img: np.ndarray, dataset_dir: str, capture_idx: int) 
             x1, y1 = c * CELL_SIZE, r * CELL_SIZE
             x2, y2 = x1 + CELL_SIZE, y1 + CELL_SIZE
             cell_img = board_img[y1:y2, x1:x2]
-            square_name = f"{COLONNE[c]}{TRAVERSE[r]}"
+            square_name = f"{FILES[c]}{RANKS[r]}"
             cell_path = os.path.join(capture_dir, f"{capture_name}_{square_name}.png")
             cv2.imwrite(cell_path, cell_img)
 
@@ -70,7 +70,7 @@ def save_board_cells(board_img: np.ndarray, dataset_dir: str, capture_idx: int) 
 
 
 def draw_overlay(board_img: np.ndarray) -> np.ndarray:
-    """Restituisce una copia dell'immagine con griglia ed etichette per la sola anteprima."""
+    """Return a copy of the board image with verification grid and square labels."""
     vis = board_img.copy()
     pad = 20
     for r in range(8):
@@ -79,7 +79,7 @@ def draw_overlay(board_img: np.ndarray) -> np.ndarray:
             x2, y2 = x1 + CELL_SIZE, y1 + CELL_SIZE
             cv2.rectangle(vis, (x1, y1), (x2, y2), (0, 255, 0), 1)
             cv2.rectangle(vis, (x1 + pad, y1 + pad), (x2 - pad, y2 - pad), (0, 255, 255), 1)
-            cv2.putText(vis, f"{COLONNE[c]}{TRAVERSE[r]}", (x1 + 5, y1 + 18),
+            cv2.putText(vis, f"{FILES[c]}{RANKS[r]}", (x1 + 5, y1 + 18),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 0, 255), 1)
     return vis
 
@@ -88,14 +88,14 @@ def main() -> None:
     os.makedirs(DATASET_DIR, exist_ok=True)
     capture_idx = next_capture_index(DATASET_DIR)
 
-    cap = cv2.VideoCapture(0)  # Cambia 0 con 1 o con l'URL IP se usi una camera esterna
+    cap = cv2.VideoCapture(0)  # Change 0 to 1 or an IP URL if using an external camera
     if not cap.isOpened():
-        print("Errore: impossibile aprire la telecamera!")
+        print("Error: unable to open camera!")
         return
 
-    print("Comandi:")
-    print("  [SPAZIO] -> Acquisisci immagine e salva le 64 celle")
-    print("  [Q]      -> Esci")
+    print("Controls:")
+    print("  [SPACE] -> Capture board and save 64 cells")
+    print("  [Q]     -> Quit")
 
     status_msg = ""
     status_until = 0.0
@@ -113,41 +113,41 @@ def main() -> None:
             marker_map = {id_val: corner[0] for corner, id_val in zip(corners, ids.flatten())}
 
             if all(k in marker_map for k in (0, 1, 2, 3)):
-                punti_sorgente = np.array([
-                    marker_map[0][2],  # Basso-Destra di ID 0 (a8)
-                    marker_map[1][3],  # Basso-Sinistra di ID 1 (h8)
-                    marker_map[2][0],  # Alto-Sinistra di ID 2 (h1)
-                    marker_map[3][1],  # Alto-Destra di ID 3 (a1)
+                src_points = np.array([
+                    marker_map[0][2],  # Bottom-Right of ID 0 (a8)
+                    marker_map[1][3],  # Bottom-Left of ID 1 (h8)
+                    marker_map[2][0],  # Top-Left of ID 2 (h1)
+                    marker_map[3][1],  # Top-Right of ID 3 (a1)
                 ], dtype="float32")
 
-                M = cv2.getPerspectiveTransform(punti_sorgente, PUNTI_DESTINAZIONE)
-                board_clean = cv2.warpPerspective(frame, M, (LATO_IMG_PX, LATO_IMG_PX))
+                M = cv2.getPerspectiveTransform(src_points, DST_POINTS)
+                board_clean = cv2.warpPerspective(frame, M, (IMG_SIDE_PX, IMG_SIDE_PX))
                 board_vis = draw_overlay(board_clean)
 
                 if time.time() < status_until:
                     cv2.putText(board_vis, status_msg, (15, 35),
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.85, (0, 255, 0), 2)
 
-                cv2.imshow("Scacchiera Raddrizzata 800x800", board_vis)
+                cv2.imshow("Warped Chessboard 800x800", board_vis)
 
-        # Mostra stato sui comandi nella finestra originale
-        info_text = "SPAZIO: Salva 64 celle | Q: Esci"
+        # Show command status on the original camera window
+        info_text = "SPACE: Save 64 cells | Q: Quit"
         if time.time() < status_until:
             info_text = status_msg
         color = (0, 255, 0) if board_clean is not None else (0, 165, 255)
         cv2.putText(frame, info_text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
-        cv2.imshow("Telecamera Originale", frame)
+        cv2.imshow("Original Camera", frame)
 
         key = cv2.waitKey(1) & 0xFF
         if key == ord(" "):
             if board_clean is not None:
                 out_dir = save_board_cells(board_clean, DATASET_DIR, capture_idx)
-                status_msg = f"Salvato scatto_{capture_idx:04d} (64 celle)"
+                status_msg = f"Saved scatto_{capture_idx:04d} (64 cells)"
                 status_until = time.time() + 2.0
                 print(f"[OK] {status_msg} -> {out_dir}")
                 capture_idx += 1
             else:
-                status_msg = "Marker 0,1,2,3 non tutti visibili!"
+                status_msg = "Markers 0,1,2,3 not all visible!"
                 status_until = time.time() + 2.0
                 print(f"[WARN] {status_msg}")
         elif key == ord("q") or key == 27:

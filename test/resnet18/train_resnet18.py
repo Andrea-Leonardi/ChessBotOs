@@ -15,7 +15,7 @@ DATASET_DIR = os.path.abspath(os.path.join(BASE_DIR, "..", "..", "datasets"))
 LABELS_CSV = os.path.join(DATASET_DIR, "labels.csv")
 MODEL_OUT = os.path.join(BASE_DIR, "models", "best_resnet18.pth")
 
-CLASSES = ["bianco", "nero", "vuota"]
+CLASSES = ["white", "black", "empty"]
 CLASS_TO_IDX = {c: i for i, c in enumerate(CLASSES)}
 
 EPOCHS = 20
@@ -33,7 +33,7 @@ def set_seed(seed: int) -> None:
 
 def load_samples(csv_path: str, dataset_dir: str) -> list[tuple[str, int]]:
     if not os.path.exists(csv_path):
-        raise FileNotFoundError(f"File non trovato: {csv_path}")
+        raise FileNotFoundError(f"File not found: {csv_path}")
 
     samples: list[tuple[str, int]] = []
     with open(csv_path, "r", newline="", encoding="utf-8") as f:
@@ -131,7 +131,7 @@ def evaluate(
 
 
 def safe_torch_save(obj: dict, path: str, retries: int = 8, delay: float = 0.5) -> None:
-    """Salva su file temporaneo e sostituisce in modo atomico (evita lock di OneDrive/Windows)."""
+    """Save to a temporary file and atomically replace (avoids OneDrive/Windows file locks)."""
     os.makedirs(os.path.dirname(path), exist_ok=True)
     tmp_path = f"{path}.tmp"
     for attempt in range(1, retries + 1):
@@ -147,7 +147,7 @@ def safe_torch_save(obj: dict, path: str, retries: int = 8, delay: float = 0.5) 
                     pass
             if attempt == retries:
                 raise RuntimeError(
-                    f"Impossibile salvare {path} (file bloccato da OneDrive o da un altro script aperto): {exc}"
+                    f"Unable to save {path} (file locked by OneDrive or another running script): {exc}"
                 ) from exc
             time.sleep(delay)
 
@@ -156,15 +156,15 @@ def main() -> None:
     set_seed(SEED)
 
     if not torch.cuda.is_available():
-        raise RuntimeError("CUDA non disponibile! Verifica l'installazione PyTorch + driver NVIDIA.")
+        raise RuntimeError("CUDA not available! Check your PyTorch + NVIDIA driver installation.")
 
     device = torch.device("cuda")
-    print(f"Device in uso: {device} ({torch.cuda.get_device_name(0)})")
+    print(f"Device: {device} ({torch.cuda.get_device_name(0)})")
 
     samples = load_samples(LABELS_CSV, DATASET_DIR)
-    print(f"Totale immagini etichettate caricate: {len(samples)}")
+    print(f"Total labeled images loaded: {len(samples)}")
     counts = Counter(lbl for _, lbl in samples)
-    print("Distribuzione classi:", {CLASSES[k]: v for k, v in sorted(counts.items())})
+    print("Class distribution:", {CLASSES[k]: v for k, v in sorted(counts.items())})
 
     train_samples, val_samples = stratified_split(samples, VAL_RATIO, SEED)
     print(f"Split -> Train: {len(train_samples)} | Validation: {len(val_samples)}\n")
@@ -262,12 +262,12 @@ def main() -> None:
             f"Val Loss: {val_loss:.4f} Acc: {val_acc * 100:6.2f}%{marker}"
         )
 
-    print("\n=== RISULTATI FINALI (BEST MODEL) ===")
+    print("\n=== FINAL RESULTS (BEST MODEL) ===")
     print(f"Best Validation Accuracy: {best_val_acc * 100:.2f}%")
-    print(f"Modello salvato in: {MODEL_OUT}")
+    print(f"Model saved to: {MODEL_OUT}")
 
     if best_conf is not None:
-        print("\nMatrice di confusione (righe = reale, colonne = predetto):")
+        print("\nConfusion matrix (rows = actual, cols = predicted):")
         header = "          " + "  ".join(f"{c:>7}" for c in CLASSES)
         print(header)
         for i, row in enumerate(best_conf):
@@ -277,12 +277,12 @@ def main() -> None:
             print(f"{CLASSES[i]:>8}  {vals}   ({acc_i:5.1f}%)")
 
     if best_errors:
-        print(f"\nErrori sul validation set ({len(best_errors)}):")
+        print(f"\nValidation errors ({len(best_errors)}):")
         for path, t, p in best_errors[:15]:
             rel = os.path.relpath(path, DATASET_DIR)
-            print(f"  {rel}: reale={CLASSES[t]} -> predetto={CLASSES[p]}")
+            print(f"  {rel}: actual={CLASSES[t]} -> predicted={CLASSES[p]}")
     else:
-        print("\nZero errori sul validation set!")
+        print("\nZero errors on the validation set!")
 
 
 if __name__ == "__main__":

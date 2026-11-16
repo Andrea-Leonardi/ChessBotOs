@@ -9,13 +9,13 @@
 
 // ===========================
 // Wi-Fi credentials
-// Includi credentials.h se presente (file ignorato da git per sicurezza)
+// Include credentials.h if present (ignored by git for security)
 // ===========================
 #if __has_include("credentials.h")
 #include "credentials.h"
 #else
-// Se credentials.h non esiste, inserisci qui le credenziali o lasciale vuote
-// per avviare automaticamente l'Hotspot "ESP32S3-CAM" (pass: 12345678)
+// If credentials.h does not exist, enter credentials here or leave empty
+// to automatically start the "ESP32S3-CAM" Hotspot (pass: 12345678)
 const char *ssid = "";
 const char *password = "";
 #endif
@@ -135,17 +135,17 @@ void setup() {
     WiFi.mode(WIFI_STA);
     WiFi.begin(ssid, password);
     WiFi.setSleep(false);
-    Serial.printf("Connessione a '%s' in corso...", ssid);
+    Serial.printf("Connecting to '%s'...", ssid);
     for (int i = 0; i < 20 && WiFi.status() != WL_CONNECTED; ++i) {
       delay(500);
       Serial.print(".");
     }
     if (WiFi.status() == WL_CONNECTED) {
       connected = true;
-      Serial.println("\nWiFi connesso con successo!");
-      Serial.printf("Apri nel browser: http://%s\n", WiFi.localIP().toString().c_str());
+      Serial.println("\nWiFi connected successfully!");
+      Serial.printf("Open in browser: http://%s\n", WiFi.localIP().toString().c_str());
     } else {
-      Serial.println("\nConnessione fallita. Avvio Hotspot Wi-Fi...");
+      Serial.println("\nConnection failed. Starting Wi-Fi Hotspot...");
     }
   }
 
@@ -153,11 +153,11 @@ void setup() {
     WiFi.mode(WIFI_AP);
     WiFi.softAP("ESP32S3-CAM", "12345678");
     Serial.println("\n========================================");
-    Serial.println("Hotspot Wi-Fi avviato!");
-    Serial.println("1. Connettiti dal PC o smartphone alla rete:");
+    Serial.println("Wi-Fi Hotspot started!");
+    Serial.println("1. Connect from PC or smartphone to network:");
     Serial.println("   SSID:     ESP32S3-CAM");
     Serial.println("   Password: 12345678");
-    Serial.printf ("2. Apri il browser su: http://%s\n", WiFi.softAPIP().toString().c_str());
+    Serial.printf ("2. Open browser at: http://%s\n", WiFi.softAPIP().toString().c_str());
     Serial.println("========================================\n");
   }
 

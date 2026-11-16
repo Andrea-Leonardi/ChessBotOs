@@ -20,44 +20,44 @@ LABELS_13CLS_CSV = os.path.join(DATASET_DIR, "labels_pieces.csv")
 ARUCO_DICT = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
 DETECTOR = cv2.aruco.ArucoDetector(ARUCO_DICT, cv2.aruco.DetectorParameters())
 
-LATO_GRIGLIA_MM = 256.0
-LATO_IMG_PX = 800
-CELL_SIZE = LATO_IMG_PX // 8
+GRID_SIDE_MM = 256.0
+IMG_SIDE_PX = 800
+CELL_SIZE = IMG_SIDE_PX // 8
 OFFSET_MM = 2.0
 
-px_per_mm = LATO_IMG_PX / LATO_GRIGLIA_MM
+px_per_mm = IMG_SIDE_PX / GRID_SIDE_MM
 off_px = OFFSET_MM * px_per_mm
 
-PUNTI_DESTINAZIONE = np.array([
+DST_POINTS = np.array([
     [-off_px, -off_px],
-    [LATO_IMG_PX + off_px, -off_px],
-    [LATO_IMG_PX + off_px, LATO_IMG_PX + off_px],
-    [-off_px, LATO_IMG_PX + off_px],
+    [IMG_SIDE_PX + off_px, -off_px],
+    [IMG_SIDE_PX + off_px, IMG_SIDE_PX + off_px],
+    [-off_px, IMG_SIDE_PX + off_px],
 ], dtype="float32")
 
-COLONNE = "abcdefgh"
-TRAVERSE = "87654321"
+FILES = "abcdefgh"
+RANKS = "87654321"
 
 PIECE_ALIASES = {
-    "t": "torre",
-    "torre": "torre",
-    "c": "cavallo",
-    "cavallo": "cavallo",
-    "a": "alfiere",
-    "alfiere": "alfiere",
-    "d": "donna",
-    "donna": "donna",
-    "r": "re",
-    "re": "re",
-    "p": "pedone",
-    "pedone": "pedone",
+    "r": "rook",
+    "rook": "rook",
+    "n": "knight",
+    "knight": "knight",
+    "b": "bishop",
+    "bishop": "bishop",
+    "q": "queen",
+    "queen": "queen",
+    "k": "king",
+    "king": "king",
+    "p": "pawn",
+    "pawn": "pawn",
 }
 
 COLOR_ALIASES = {
-    "b": "bianco",
-    "bianco": "bianco",
-    "n": "nero",
-    "nero": "nero",
+    "w": "white",
+    "white": "white",
+    "b": "black",
+    "black": "black",
     "auto": "auto",
     "": "auto",
 }
@@ -100,7 +100,7 @@ def next_targeted_index(dataset_dir: str) -> int:
 
 def load_3class_model(model_path: str, device: torch.device) -> tuple[nn.Module, list[str]]:
     if not os.path.exists(model_path):
-        raise FileNotFoundError(f"Modello 3 classi non trovato: {model_path}")
+        raise FileNotFoundError(f"3-class model not found: {model_path}")
     ckpt = torch.load(model_path, map_location=device, weights_only=True)
     classes = ckpt["classes"]
     model = models.resnet18(weights=None)
@@ -132,22 +132,22 @@ def classify_cells_3cls(
 
 
 def prompt_target_piece() -> tuple[str, str]:
-    print("\n=== Imposta il pezzo da fotografare ===")
+    print("\n=== Set target piece to capture ===")
     while True:
-        raw_piece = input("Pezzo [T=torre, C=cavallo, A=alfiere, D=donna, R=re, P=pedone]: ").strip().lower()
+        raw_piece = input("Piece [R=rook, N=knight, B=bishop, Q=queen, K=king, P=pawn]: ").strip().lower()
         if raw_piece in PIECE_ALIASES:
             piece = PIECE_ALIASES[raw_piece]
             break
-        print("Valore non valido. Usa T, C, A, D, R, P (o il nome completo).")
+        print("Invalid value. Use R, N, B, Q, K, P (or full piece name).")
 
     while True:
-        raw_color = input("Colore [B=bianco, N=nero, INVIO/AUTO=usa colore predetto dal modello]: ").strip().lower()
+        raw_color = input("Color [W=white, B=black, ENTER/AUTO=use model predicted color]: ").strip().lower()
         if raw_color in COLOR_ALIASES:
             color_mode = COLOR_ALIASES[raw_color]
             break
-        print("Valore non valido. Usa B, N oppure premi INVIO per AUTO.")
+        print("Invalid value. Use W, B, or press ENTER for AUTO.")
 
-    print(f"--> Target attivo: pezzo={piece}, colore={color_mode.upper()}\n")
+    print(f"--> Active target: piece={piece}, color={color_mode.upper()}\n")
     return piece, color_mode
 
 
@@ -159,13 +159,13 @@ def save_non_empty_cells(
     target_piece: str,
     color_mode: str,
 ) -> list[tuple[str, str, str]]:
-    """Salva SOLO le celle non vuote e restituisce [(rel_path, label_3cls, label_13cls), ...]."""
+    """Save ONLY non-empty cells and return [(rel_path, label_3cls, label_13cls), ...]."""
     shot_name = f"mirato_{shot_idx:04d}"
     shot_dir = os.path.join(dataset_dir, shot_name)
     saved: list[tuple[str, str, str]] = []
 
     for idx, pred_3cls in enumerate(preds_3cls):
-        if pred_3cls == "vuota":
+        if pred_3cls == "empty":
             continue
 
         r, c = divmod(idx, 8)
@@ -173,7 +173,7 @@ def save_non_empty_cells(
         cell_img = board_bgr[y1:y1 + CELL_SIZE, x1:x1 + CELL_SIZE]
 
         os.makedirs(shot_dir, exist_ok=True)
-        square_name = f"{COLONNE[c]}{TRAVERSE[r]}"
+        square_name = f"{FILES[c]}{RANKS[r]}"
         fname = f"{shot_name}_{square_name}.png"
         cv2.imwrite(os.path.join(shot_dir, fname), cell_img)
 
@@ -197,22 +197,22 @@ def draw_live_overlay(
             pred = preds[r * 8 + c]
             x1, y1 = c * CELL_SIZE, r * CELL_SIZE
             cv2.rectangle(vis, (x1, y1), (x1 + CELL_SIZE, y1 + CELL_SIZE), (70, 70, 70), 1)
-            if pred != "vuota":
+            if pred != "empty":
                 resolved_color = pred if color_mode == "auto" else color_mode
-                box_color = (0, 220, 0) if resolved_color == "bianco" else (0, 200, 255)
+                box_color = (0, 220, 0) if resolved_color == "white" else (0, 200, 255)
                 cv2.rectangle(vis, (x1 + 2, y1 + 2), (x1 + CELL_SIZE - 2, y1 + CELL_SIZE - 2), box_color, 2)
                 tag = f"{resolved_color[0].upper()}-{target_piece[:3].upper()}"
                 cv2.putText(vis, tag, (x1 + 8, y1 + 28), cv2.FONT_HERSHEY_SIMPLEX, 0.55, box_color, 2)
 
-    cv2.rectangle(vis, (0, 0), (LATO_IMG_PX, 34), (0, 0, 0), -1)
+    cv2.rectangle(vis, (0, 0), (IMG_SIDE_PX, 34), (0, 0, 0), -1)
     cv2.putText(vis, status_msg, (10, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
     return vis
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Acquisizione mirata senza salvare celle vuote.")
-    parser.add_argument("--piece", type=str, default="", help="Pezzo target (torre, cavallo, alfiere, donna, re, pedone)")
-    parser.add_argument("--color", type=str, default="", help="Colore target (bianco, nero, auto)")
+    parser = argparse.ArgumentParser(description="Targeted piece acquisition without saving empty cells.")
+    parser.add_argument("--piece", type=str, default="", help="Target piece (rook, knight, bishop, queen, king, pawn)")
+    parser.add_argument("--color", type=str, default="", help="Target color (white, black, auto)")
     args = parser.parse_args()
 
     if args.piece.strip().lower() in PIECE_ALIASES:
@@ -223,7 +223,7 @@ def main() -> None:
         target_piece, color_mode = prompt_target_piece()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"TargetedPieceCollector su {device}")
+    print(f"TargetedPieceCollector on {device}")
 
     model_3cls, classes_3cls = load_3class_model(MODEL_3CLS_PATH, device)
     tf = transforms.Compose([
@@ -237,18 +237,18 @@ def main() -> None:
     shot_idx = next_targeted_index(DATASET_DIR)
     history: list[tuple[int, list[str]]] = []
 
-    cap = cv2.VideoCapture(0)  # Cambia 0 con 1 o con l'URL IP se usi una camera esterna
+    cap = cv2.VideoCapture(0)  # Change 0 to 1 or an IP URL if using an external camera
     if not cap.isOpened():
-        print("Errore: impossibile aprire la telecamera!")
+        print("Error: unable to open camera!")
         return
 
-    print("Comandi finestra:")
-    print("  [SPAZIO] -> Scatta: scarta le celle vuote e salva/etichetta solo i pezzi rilevati")
-    print("  [U]      -> Annulla l'ultimo scatto mirato")
-    print("  [M]      -> Cambia pezzo/colore target da terminale")
-    print("  [Q]      -> Esci")
+    print("Window controls:")
+    print("  [SPACE] -> Capture: discard empty cells and save/label only detected pieces")
+    print("  [U]     -> Undo last targeted capture")
+    print("  [M]     -> Change target piece/color from terminal")
+    print("  [X/ESC] -> Quit")
 
-    status_msg = f"Target: {target_piece} ({color_mode}) | SPAZIO: Scatta"
+    status_msg = f"Target: {target_piece} ({color_mode}) | SPACE: Capture"
     status_until = 0.0
 
     while True:
@@ -265,31 +265,31 @@ def main() -> None:
             marker_map = {id_val: corner[0] for corner, id_val in zip(corners, ids.flatten())}
 
             if all(k in marker_map for k in (0, 1, 2, 3)):
-                punti_sorgente = np.array([
+                src_points = np.array([
                     marker_map[0][2],
                     marker_map[1][3],
                     marker_map[2][0],
                     marker_map[3][1],
                 ], dtype="float32")
 
-                M = cv2.getPerspectiveTransform(punti_sorgente, PUNTI_DESTINAZIONE)
-                board_clean = cv2.warpPerspective(frame, M, (LATO_IMG_PX, LATO_IMG_PX))
+                M = cv2.getPerspectiveTransform(src_points, DST_POINTS)
+                board_clean = cv2.warpPerspective(frame, M, (IMG_SIDE_PX, IMG_SIDE_PX))
                 preds_3cls = classify_cells_3cls(board_clean, model_3cls, classes_3cls, tf, device)
 
-                n_pieces = sum(1 for p in preds_3cls if p != "vuota")
-                default_msg = f"Target: {target_piece} ({color_mode}) | Pezzi rilevati: {n_pieces} | SPAZIO: Scatta"
+                n_pieces = sum(1 for p in preds_3cls if p != "empty")
+                default_msg = f"Target: {target_piece} ({color_mode}) | Detected: {n_pieces} | SPACE: Capture"
                 msg = status_msg if time.time() < status_until else default_msg
                 vis = draw_live_overlay(board_clean, preds_3cls, target_piece, color_mode, msg)
-                cv2.imshow("TargetedPieceCollector - Scacchiera", vis)
+                cv2.imshow("TargetedPieceCollector - Board", vis)
 
-        cv2.imshow("Telecamera Originale", frame)
+        cv2.imshow("Original Camera", frame)
         key = cv2.waitKey(1) & 0xFF
 
         if key == ord(" "):
             if board_clean is not None and preds_3cls is not None:
                 saved = save_non_empty_cells(board_clean, preds_3cls, DATASET_DIR, shot_idx, target_piece, color_mode)
                 if not saved:
-                    status_msg = "Nessun pezzo rilevato: nessuna foto salvata!"
+                    status_msg = "No pieces detected: nothing saved!"
                     status_until = time.time() + 2.0
                     continue
 
@@ -304,12 +304,12 @@ def main() -> None:
                 history.append((shot_idx, added_paths))
 
                 summary = ", ".join(f"{os.path.basename(rp)}->{l13}" for rp, _, l13 in saved)
-                print(f"[mirato_{shot_idx:04d}] Salvati {len(saved)} pezzi (vuote scartate): {summary}")
-                status_msg = f"mirato_{shot_idx:04d}: salvati {len(saved)} pezzi!"
+                print(f"[mirato_{shot_idx:04d}] Saved {len(saved)} pieces (empty discarded): {summary}")
+                status_msg = f"mirato_{shot_idx:04d}: saved {len(saved)} pieces!"
                 status_until = time.time() + 2.0
                 shot_idx += 1
             else:
-                status_msg = "Marker 0,1,2,3 non tutti visibili!"
+                status_msg = "Markers 0,1,2,3 not all visible!"
                 status_until = time.time() + 2.0
         elif key in (ord("u"), ord("U")):
             if history:
@@ -320,14 +320,14 @@ def main() -> None:
                 save_csv_map(LABELS_3CLS_CSV, labels_3cls)
                 save_csv_map(LABELS_13CLS_CSV, labels_13cls)
                 shutil.rmtree(os.path.join(DATASET_DIR, f"mirato_{last_idx:04d}"), ignore_errors=True)
-                print(f"Annullato mirato_{last_idx:04d} ({len(last_paths)} pezzi rimossi).")
-                status_msg = f"Annullato mirato_{last_idx:04d}"
+                print(f"Undid mirato_{last_idx:04d} ({len(last_paths)} pieces removed).")
+                status_msg = f"Undid mirato_{last_idx:04d}"
                 status_until = time.time() + 2.0
         elif key in (ord("m"), ord("M")):
             target_piece, color_mode = prompt_target_piece()
-            status_msg = f"Nuovo target: {target_piece} ({color_mode})"
+            status_msg = f"New target: {target_piece} ({color_mode})"
             status_until = time.time() + 2.0
-        elif key == ord("q") or key == 27:
+        elif key in (ord("x"), ord("X"), 27):
             break
 
     cap.release()
