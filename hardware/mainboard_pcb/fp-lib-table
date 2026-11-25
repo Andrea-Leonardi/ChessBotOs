@@ -1,0 +1,4 @@
+(fp_lib_table
+  (version 7)
+  (lib (name "ChessBot_Local")(type "KiCad")(uri "${KIPRJMOD}/ChessBot_Local.pretty")(options "")(descr "Local ChessBot custom footprints"))
+)

@@ -24,3 +24,9 @@ build/
 # System and OS files
 Thumbs.db
 .DS_Store
+
+# KiCad & Blender backups / lockfiles
+~*.lck
+*-backups/
+*.kicad_prl
+*.blend1
