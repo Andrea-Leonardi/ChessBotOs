@@ -2,12 +2,15 @@
 
 **End-to-end autonomous physical chess-playing robot** combining a custom 3D-printed **5-bar parallel SCARA manipulator**, **deep-learning computer vision (ResNet-18 + ArUco)**, **Stockfish chess engine**, **distributed ESP32 firmware**, and a **custom 2-layer KiCad mainboard PCB**.
 
+![Status](https://img.shields.io/badge/Status-Work%20in%20Progress-F59E0B?style=flat-square)
 ![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=flat-square&logo=python&logoColor=white)
 ![PyTorch](https://img.shields.io/badge/PyTorch-ResNet--18-EE4C2C?style=flat-square&logo=pytorch&logoColor=white)
 ![OpenCV](https://img.shields.io/badge/OpenCV-ArUco%20%2B%20CV-5C3EE8?style=flat-square&logo=opencv&logoColor=white)
 ![ESP32](https://img.shields.io/badge/ESP32--S3%20%2F%20ESP32-C%2B%2B%20Arduino-E7352C?style=flat-square&logo=espressif&logoColor=white)
 ![KiCad](https://img.shields.io/badge/KiCad-10.0%20PCB-314CB0?style=flat-square&logo=kicad&logoColor=white)
 ![Blender](https://img.shields.io/badge/Blender-3D%20CAD-F5792A?style=flat-square&logo=blender&logoColor=white)
+
+> **Work in Progress:** Core subsystems (3D-printed SCARA hardware, inverse kinematics firmware, ArUco + ResNet-18 vision pipeline, and custom KiCad mainboard PCB) are built and tested; final PCB assembly and full end-to-end game orchestration are currently under active development.
 
 ---
 
@@ -43,29 +46,29 @@
 
 ```mermaid
 flowchart LR
-    subgraph HOST["Host PC (Python · PyTorch · Stockfish)"]
-        CV["ArUco Warp + ResNet-18\n(3-class & 13-class)"]
-        ENG["Stockfish Engine\n& Game Orchestrator"]
+    subgraph HOST["Host PC - Python / PyTorch / Stockfish"]
+        CV["ArUco Warp + ResNet-18 (3-class & 13-class)"]
+        ENG["Stockfish Engine & Game Orchestrator"]
         CV --> ENG
     end
 
     subgraph CAM["Overhead Vision Node"]
-        ESP_CAM["ESP32-S3 + OV5640\n(1:1 Square Stream + AF)"]
+        ESP_CAM["ESP32-S3 + OV5640 (1:1 Square Stream + AF)"]
     end
 
     subgraph MOTION["Mainboard PCB v1.2 (24V / 6V / 5V)"]
-        ESP_MOT["ESP32 38-pin\n5-Bar SCARA IK + Z-Axis"]
-        DRV["3x TMC2209 + NEMA 17\n+ 25 kg Gripper Servo"]
+        ESP_MOT["ESP32 38-pin - 5-Bar SCARA IK + Z-Axis"]
+        DRV["3x TMC2209 + NEMA 17 + 25 kg Gripper Servo"]
         ESP_MOT --> DRV
     end
 
     subgraph HMI["Clock Console (3D Printed)"]
-        CLK["ESP32-S3 4.0\" IPS Touch\n+ Mechanical MX Button"]
+        CLK["ESP32-S3 4.0-inch IPS Touch + MX Button"]
     end
 
-    ESP_CAM -- "HTTP / Wi-Fi" --> CV
-    ENG -- "Move Commands" --> ESP_MOT
-    ENG <--> |"Clock & UX State"| CLK
+    ESP_CAM -->|HTTP / Wi-Fi| CV
+    ENG -->|Move Commands| ESP_MOT
+    ENG <-->|Clock & UX State| CLK
 ```
 
 ---
