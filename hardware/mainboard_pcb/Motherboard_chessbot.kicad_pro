@@ -521,7 +521,11 @@
       "version": 5
     },
     "net_colors": {},
-    "netclass_assignments": {},
+    "netclass_assignments": {
+      "/12V_FAN": [
+        "Power"
+      ]
+    },
     "netclass_patterns": []
   },
   "pcbnew": {

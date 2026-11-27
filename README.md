@@ -18,7 +18,7 @@
 
 - **5-Bar Parallel SCARA Kinematics:** Analytical inverse kinematics (`a = 183 mm`, `b = 230 mm`, `16T:100T` belt reduction) ported from Python (`IK.py`) to real-time ESP32 C++ (`scara_ik.ino`) with trapezoidal acceleration ramps and **~1.6 mm RMS positional accuracy** calibrated across 35 measured board points.
 - **2-Stage Computer Vision Pipeline:** Overhead **ESP32-S3 + OV5640** autofocus camera stream with 1:1 hardware crop, **ArUco homography** board warping (`800×800` → 64 cells), and dual **PyTorch ResNet-18** models (3-class occupancy/color + 13-class full piece classification) with Class Activation Map (CAM) interpretability.
-- **Custom 2-Layer Mainboard PCB:** Designed from scratch in **KiCad 10.0** (`100 × 100 mm`, **0 DRC errors**, **0 unconnected pads**), integrating an ESP32 38-pin controller, 3× **TMC2209** stepper drivers, dual **MP1584EN** buck rails (5V logic + 6V 25 kg gripper servo), NC hardware E-Stop cutting motor power only (`VMOT_24V`), 5A fuse, and unified JST-XH connectors.
+- **Custom 2-Layer Mainboard PCB:** Designed from scratch in **KiCad 10.0** (`100 × 100 mm`, **0 DRC errors**, **0 unconnected pads**), integrating an ESP32 38-pin controller, 3× **TMC2209** stepper drivers, triple **MP1584EN** buck rails (5V logic + 6V 25 kg gripper servo + low-profile 10–12V blower fan under ESP32), NC hardware E-Stop cutting motor power only (`VMOT_24V`), 5A fuse, and unified JST-XH connectors.
 - **3D-Printed Mechanics & Clock Console:** Full PETG + 2020 aluminum extrusion robot CAD (`ChessBot_checkpoint_4.blend`) and a dedicated touchscreen **Chess Clock Console** (`ChessBot_ClockConsole.blend`) housing an ESP32-S3 4.0" IPS capacitive display and a mechanical MX top switch.
 
 ---
@@ -28,9 +28,9 @@
 <table>
   <tr>
     <td align="center" width="52%">
-      <img src="docs/images/pcb_mainboard_top.png" alt="ChessBot Mainboard v1.2 PCB Top Render" />
+      <img src="docs/images/pcb_mainboard_top.png" alt="ChessBot Mainboard v1.3 PCB Top Render" />
       <br />
-      <sub><b>Custom 2-Layer Mainboard PCB v1.2</b> (100×100 mm, KiCad 10.0 — 3× TMC2209, ESP32, dual MP1584EN, E-Stop)</sub>
+      <sub><b>Custom 2-Layer Mainboard PCB v1.3</b> (100×100 mm, KiCad 10.0 — 3× TMC2209, ESP32, 3× MP1584EN, E-Stop)</sub>
     </td>
     <td align="center" width="48%">
       <img src="test/resnet18/visualizations/overview_10_pieces.png" alt="ResNet-18 Layer Activations and CAMs" />
@@ -56,7 +56,7 @@ flowchart LR
         ESP_CAM["ESP32-S3 + OV5640 (1:1 Square Stream + AF)"]
     end
 
-    subgraph MOTION["Mainboard PCB v1.2 (24V / 6V / 5V)"]
+    subgraph MOTION["Mainboard PCB v1.3 (24V / 12V / 6V / 5V)"]
         ESP_MOT["ESP32 38-pin - 5-Bar SCARA IK + Z-Axis"]
         DRV["3x TMC2209 + NEMA 17 + 25 kg Gripper Servo"]
         ESP_MOT --> DRV
@@ -83,13 +83,13 @@ ChessBotOs/
 │   ├── ChessBot_checkpoint_4.blend             # Full 5-bar SCARA robot assembly (2020 frame + PETG parts)
 │   └── ChessBot_ClockConsole.blend             # 3D-printable 4.0" IPS touch clock console + MX switch
 ├── hardware/
-│   └── mainboard_pcb/                          # Custom 2-layer KiCad 10.0 Mainboard v1.2 (100x100 mm)
+│   └── mainboard_pcb/                          # Custom 2-layer KiCad 10.0 Mainboard v1.3 (100x100 mm)
 │       ├── Motherboard_chessbot.kicad_pro
 │       ├── Motherboard_chessbot.kicad_sch      # Full schematic (0 ERC errors)
 │       ├── Motherboard_chessbot.kicad_pcb      # Routed 2-layer PCB (0 DRC errors, solid B.Cu GND plane)
 │       ├── ChessBot_Local.pretty/              # Custom STEP-verified MP1584EN footprint
 │       ├── gerbers/                            # Production-ready Gerber + Excellon drill ZIP
-│       └── ChessBot_Mainboard_v1.2_PrintCheck_1to1.pdf
+│       └── ChessBot_Mainboard_v1.3_PrintCheck_1to1.pdf
 ├── docs/                                       # Engineering specs, BOM & hardware guides (Italian)
 │   ├── riassunto_progetto_chessbot.md          # Complete project & mechatronics overview
 │   ├── specifiche_funzionali_chessbot.md       # Functional specs, UX flows & Fair Clock logic
@@ -159,8 +159,8 @@ python test/resnet18/visualize_resnet_layers.py
 
 ### 5. Custom Mainboard PCB (`hardware/mainboard_pcb`)
 - **Board:** `100 × 100 mm`, 2 layers, 1 oz Cu, THT + socketed modules (production-ready for JLCPCB / PCBWay).
-- **Power rails:** 24V input → 5A fuse (`F1`) → Main Switch (`J18`) → NC E-Stop (`J2`, cuts `VMOT_24V` only so logic stays alive) + dual `MP1584EN` buck converters (`5.0 V` logic/camera/clock/fan, `6.0 V` gripper servo).
-- **Manufacturing package:** Ready-to-upload Gerber + Excellon drill archive in [`hardware/mainboard_pcb/gerbers/`](hardware/mainboard_pcb/gerbers/ChessBot_Mainboard_v1.2_PCBWay.zip) and a 1:1 A4 paper fit-check PDF in [`hardware/mainboard_pcb/`](hardware/mainboard_pcb/ChessBot_Mainboard_v1.2_PrintCheck_1to1.pdf).
+- **Power rails:** 24V input → 5A fuse (`F1`) → Main Switch (`J18`) → NC E-Stop (`J2`, cuts `VMOT_24V` only so logic stays alive) + triple `MP1584EN` buck converters (`5.0 V` logic/camera/clock, `6.0 V` gripper servo, `10–12 V` low-profile radial blower under ESP32).
+- **Manufacturing package:** Ready-to-upload Gerber + Excellon drill archive in [`hardware/mainboard_pcb/gerbers/`](hardware/mainboard_pcb/gerbers/ChessBot_Mainboard_v1.3_PCBWay.zip) and a 1:1 A4 paper fit-check PDF in [`hardware/mainboard_pcb/`](hardware/mainboard_pcb/ChessBot_Mainboard_v1.3_PrintCheck_1to1.pdf).
 
 ---
 
